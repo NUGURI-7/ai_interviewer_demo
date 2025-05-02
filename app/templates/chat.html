@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 面试官</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-100 to-white min-h-screen flex flex-col items-center justify-between">
+
+  <!-- Header -->
+  <header class="w-full bg-indigo-600 text-white py-4 shadow-md text-center">
+    <h1 class="text-2xl font-bold">🧠 AI 面试官</h1>
+    <p class="text-sm text-indigo-200">智能问答 · 轻松练习 · 实战模拟</p>
+  </header>
+
+  <!-- Chat Container -->
+  <main class="w-full max-w-3xl flex-1 overflow-y-auto px-4 py-6 space-y-4" id="chat-box">
+    <!-- 动态插入消息 -->
+  </main>
+
+  <!-- Footer -->
+  <footer class="w-full max-w-3xl bg-white border-t px-4 py-3 flex items-center gap-2">
+    <input
+      id="answer-input"
+      type="text"
+      class="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm"
+      placeholder="输入你的回答，按 Enter 或点击发送..."
+    />
+    <button
+      onclick="sendMessage()"
+      class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-medium shadow hover:bg-indigo-700 transition"
+    >
+      发送
+    </button>
+  </footer>
+
+  <!-- JS Logic -->
+  <script>
+    const socket = io();
+    let usedIds = [];
+    let prevQuestionId = null;
+    const chatBox = document.getElementById("chat-box");
+
+    function appendMessage(sender, text) {
+      const wrapper = document.createElement("div");
+      wrapper.className = `flex items-start space-x-2 ${
+        sender === "bot" ? "justify-start" : "justify-end"
+      }`;
+
+      const bubble = document.createElement("div");
+      bubble.className = `rounded-xl px-4 py-2 text-base shadow max-w-[75%] ${
+        sender === "bot"
+          ? "bg-white text-gray-800 border border-gray-200"
+          : "bg-indigo-600 text-white"
+      }`;
+
+      const avatar = document.createElement("div");
+      avatar.className = "w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-sm";
+      avatar.textContent = sender === "bot" ? "AI" : "你";
+
+      bubble.innerHTML = text;
+      wrapper.appendChild(sender === "bot" ? avatar : bubble);
+      wrapper.appendChild(sender === "bot" ? bubble : avatar);
+
+      chatBox.appendChild(wrapper);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    socket.on("connect", function () {
+      socket.emit("user_message", {
+        message: "",
+        prev_question_id: null,
+        used_ids: [],
+      });
+    });
+
+    socket.on("bot_message", function (data) {
+      appendMessage("bot", `<strong>系统提示：</strong> ${data.evaluation}`);
+      appendMessage("bot", `<strong>问题：</strong> ${data.next_question}`);
+      prevQuestionId = data.next_question_id;
+      usedIds.push(data.next_question_id);
+    });
+
+    socket.on("bot_response", function (data) {
+      appendMessage("bot", `<strong>评价：</strong> ${data.evaluation}`);
+      appendMessage("bot", `<strong>问题：</strong> ${data.next_question}`);
+      prevQuestionId = data.next_question_id;
+      usedIds.push(data.next_question_id);
+    });
+
+    function sendMessage() {
+      const input = document.getElementById("answer-input");
+      const msg = input.value.trim();
+      if (!msg) return;
+      appendMessage("user", msg);
+      socket.emit("user_message", {
+        message: msg,
+        prev_question_id: prevQuestionId,
+        used_ids: usedIds,
+      });
+      input.value = "";
+    }
+
+    document.getElementById("answer-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>
