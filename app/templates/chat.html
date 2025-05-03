@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI 面试官</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body class="bg-gradient-to-br from-indigo-100 to-white min-h-screen flex flex-col items-center justify-between">
@@ -17,17 +18,28 @@
 
   <!-- Chat Container -->
   <main class="w-full max-w-3xl flex-1 overflow-y-auto px-4 py-6 space-y-4" id="chat-box">
+    <!-- 这是用来展示 AI 回复的区域 -->
+    <div id="ai-response" class="prose max-w-none mt-4 p-4 bg-gray-100 rounded-xl"></div>
+
+   
     <!-- 动态插入消息 -->
   </main>
 
   <!-- Footer -->
   <footer class="w-full max-w-3xl bg-white border-t px-4 py-3 flex items-center gap-2">
-    <input
-      id="answer-input"
-      type="text"
-      class="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm"
-      placeholder="输入你的回答，按 Enter 或点击发送..."
-    />
+    <textarea
+        id="answer-input"
+        rows="1"
+        oninput="autoResize(this)"
+        class="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm resize-none overflow-hidden"
+        placeholder="输入你的回答，按 Enter 或点击发送..."
+    ></textarea>
+  
+    <!-- 语音录入按钮 -->
+    <button id="start-record-btn" onclick="startListening()" class="bg-green-600 text-white px-4 py-2 rounded-xl ml-2">🎙️ 开始录音</button>
+    <button id="stop-record-btn" onclick="stopListening()" class="bg-red-600 text-white px-4 py-2 rounded-xl ml-2 hidden">🛑 停止</button>
+    <span id="record-time" class="ml-2 text-sm text-gray-500 hidden"></span>
+  
     <button
       onclick="sendMessage()"
       class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-medium shadow hover:bg-indigo-700 transition"
@@ -35,9 +47,97 @@
       发送
     </button>
   </footer>
-
+  
+  
+  
   <!-- JS Logic -->
   <script>
+    let recognition = null;
+    let startTime = null;
+    let timerInterval = null;
+    let finalTranscript = '';
+
+  function startListening() {
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    finalTranscript = '';
+
+    // UI变化
+    document.getElementById('start-record-btn').style.display = 'none';
+    document.getElementById('stop-record-btn').style.display = 'inline-flex';
+    document.getElementById('record-time').classList.remove('hidden');
+
+    // 开始计时
+    startTime = Date.now();
+    timerInterval = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      document.getElementById('record-time').textContent = `录音中：${seconds} 秒`;
+    }, 1000);
+
+    recognition.onstart = function () {
+      console.log("语音识别已启动");
+    };
+
+    recognition.onresult = function (event) {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            }
+        }
+        const input = document.getElementById('answer-input');
+        input.value += finalTranscript;
+        autoResize(input);
+        // document.getElementById('answer-input').value += finalTranscript;
+    };
+
+    recognition.onerror = function (event) {
+      alert("语音识别错误：" + event.error);
+    };
+
+    recognition.onend = function () {
+      stopUI();
+    };
+
+    recognition.start();
+  }
+
+  function stopListening() {
+    if (recognition) {
+      recognition.stop();
+    }
+  }
+
+  function stopUI() {
+    clearInterval(timerInterval);
+    document.getElementById('start-record-btn').style.display = 'inline-flex';
+    document.getElementById('stop-record-btn').style.display = 'none';
+    document.getElementById('record-time').classList.add('hidden');
+    document.getElementById('record-time').textContent = "";
+  }
+
+  function sendMessage() {
+    const input = document.getElementById("answer-input");
+    const message = input.value.trim();
+    if (message !== "") {
+      socket.emit("user_message", { message: message });
+      input.value = "";
+    }
+  }
+
+  function autoResize(textarea) {
+  textarea.style.height = 'auto';  // 重置高度
+  textarea.style.height = textarea.scrollHeight + 'px';  // 设置为内容高度
+}
+
+function showAIReply(markdownText) {
+  const html = marked.parse(markdownText);
+  document.getElementById("ai-response").innerHTML = html;
+}
+
+
     const socket = io();
     let usedIds = [];
     let prevQuestionId = null;
@@ -60,7 +160,7 @@
       avatar.className = "w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-sm";
       avatar.textContent = sender === "bot" ? "AI" : "你";
 
-      bubble.innerHTML = text;
+      bubble.innerHTML = marked.parse(text);
       wrapper.appendChild(sender === "bot" ? avatar : bubble);
       wrapper.appendChild(sender === "bot" ? bubble : avatar);
 
@@ -90,6 +190,12 @@
       usedIds.push(data.next_question_id);
     });
 
+    socket.on("ai_reply", function (data) {
+        const replyText = data.reply; // 后端返回的 markdown 内容
+        showAIReply(replyText); // 用 marked 渲染并显示
+    });
+
+
     function sendMessage() {
       const input = document.getElementById("answer-input");
       const msg = input.value.trim();
@@ -101,7 +207,10 @@
         used_ids: usedIds,
       });
       input.value = "";
+      autoResize(input); // 调整输入框高度
     }
+
+    
 
     document.getElementById("answer-input").addEventListener("keydown", function (e) {
       if (e.key === "Enter") {

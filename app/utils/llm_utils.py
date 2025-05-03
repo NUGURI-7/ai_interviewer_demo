@@ -40,7 +40,7 @@ def evaluate_answer(user_answer: str,question_text: str) -> str:
         )
         if response.status_code == HTTPStatus.OK:
             # 解析API返回的结果
-            reply = response.output.choices[0].message.content.strip()
+            reply = response.output.choices[0].message.content
             return reply  # 返回评价结果
         else:
             # 处理API调用失败的情况
