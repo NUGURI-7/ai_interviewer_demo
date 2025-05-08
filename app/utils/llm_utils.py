@@ -17,20 +17,21 @@ def evaluate_answer(user_answer: str,question_text: str) -> str:
     # 构建prompt
     prompt = (
         "你是一位专业的、严格但公正的面试官。\n"
-        "请根据以下面试问题和用户的回答，给出一个简洁的评价。\n"
+        "请根据以下面试问题和用户的回答，给出一个简洁的评价。因为用户可能是音频转的文字，一些专业术语拼写错误请不要在意,不要影响评分\n"
         f"面试问题: {question_text}\n" 
         f"用户回答: {user_answer}\n"
         "请给出评价，内容包括：\n"
         "1. 评价内容\n"
         "2. 评价分数(1-10分)\n"
         "3. 评价建议\n"
+        "4.帮助记忆的思维导图：\n"
     )
 
     try:
         # 调用阿里云同义千问API进行评价
         response = dashscope.Generation.call(
             prompt=prompt,
-            model="deepseek-r1",
+            model="qwen-plus-latest",
             temperature=0.7,
             max_tokens=2000,
             top_p=0.9,
