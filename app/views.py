@@ -43,7 +43,7 @@ def commit_page():
 
 
 
-    return render_template('commit.html')
+
 
 
 
